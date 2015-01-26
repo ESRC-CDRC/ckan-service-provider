@@ -179,8 +179,73 @@ def get_job(job_id):
     return result_dict
 
 
-def add_pending_job(job_id, job_key, job_type, api_key,
+def get_next_async_blocking_job(done_job_meta, is_conflict):
+    """ Return a list of async pending jobs to find suitable jobs to run
+        (avoid race condition for datapusher)."""
+    if is_conflict is None:
+        return None
+    conn = ENGINE.connect()
+    res = conn.execute(JOBS_TABLE.select().where(JOBS_TABLE.c.status == 'blocking'))
+    # Since the conflicting job finished, the blocking one can be started
+    for job in res:
+        job_meta = _get_metadata(job.id)
+        if is_conflict(job_meta, done_job_meta):
+            return job.id
+    return None
+
+
+def should_be_blocked(new_job_meta, is_conflict):
+    """ Check existing whether the new job is conflicting with the existing running ones."""
+    conn = ENGINE.connect()
+    with conn.begin():
+        select = JOBS_TABLE.select([JOBS_TABLE.c.job_id])\
+            .group_by(JOBS_TABLE.c.job_id)\
+            .order_by(JOBS_TABLE.c.requested_timestamp.desc())\
+            .where(JOBS_TABLE.c.status == 'pending')\
+            .with_for_update()
+        res = conn.execute(select)
+        for (job_id, ) in res:
+            job_meta = _get_metadata(job_id)
+            if is_conflict(new_job_meta, job_meta):
+                return True
+    return False
+
+
+def mark_job_as_pending(job_id, data=None):
+    """Mark a job as running or waiting for running.
+
+    :param job_id: the job_id of the job to be updated
+    :type job_id: unicode
+
+    :param data: the output data returned by the job
+    :type data: any JSON-serializable type (including None)
+
+    """
+    update_dict = {
+        "status": "pending",
+        "data": json.dumps(data),
+        "finished_timestamp": datetime.datetime.now(),
+    }
+    _update_job(job_id, update_dict)
+
+
+
+def add_pending_job(job_id, job_key, job_type, api_key, status='pending',
                     data=None, metadata=None, result_url=None):
+    """ Add a new job and set it to pending (running/going to run)"""
+    add_job(job_id, job_key, job_type, api_key, status='pending',
+            data=data, metadata=metadata, result_url=result_url)
+
+
+def add_blocking_job(job_id, job_key, job_type, api_key, status='blocking',
+                     data=None, metadata=None, result_url=None):
+    """ Add a new job and set it to blocking (having a conflicting peer running)"""
+    add_job(job_id, job_key, job_type, api_key, status='pending',
+            data=data, metadata=metadata, result_url=result_url)
+
+
+def add_job(job_id, job_key, job_type, api_key, status='pending',
+            data=None, metadata=None, result_url=None):
     """Add a new job with status "pending" to the jobs table.
 
     All code that adds jobs to the jobs table should go through this function.

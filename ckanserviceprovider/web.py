@@ -30,7 +30,7 @@ import default_settings
 # modules. It would be good to factor out as many of these as possible.
 sync_types = {}
 async_types = {}
-job_statuses = ['pending', 'complete', 'error']
+job_statuses = ['pending', 'complete', 'error', 'blocking']
 app = flask.Flask(__name__)
 scheduler = None
 _users = None
@@ -184,6 +184,15 @@ def job_listener(event):
         db.mark_job_as_errored(job_id, error_object)
     else:
         db.mark_job_as_completed(job_id, event.retval)
+
+    job_meta = db._get_metadata(job_id)
+    try:
+        job_id = db.get_next_async_blocking_job(
+            db._get_metadata(job_id), async_types[job_meta['job_type']][1])
+        db.mark_job_as_pending(job_id)
+    except:
+        pass
+
 
     api_key = db.get_job(job_id)["api_key"]
     result_ok = send_result(job_id, api_key)
@@ -674,15 +683,18 @@ def run_synchronous_job(job, job_id, job_key, input):
 
 
 def run_asynchronous_job(job, job_id, job_key, input):
+    job, is_conflict = async_types.get(input['job_type'])
     if not scheduler.running:
         scheduler.start()
     try:
-        db.add_pending_job(job_id, job_key, **input)
+        if db.should_be_blocked(input['metadata'], is_conflict):
+            db.add_blocking_job(job_id, job_key, **input)
+        else:
+            db.add_pending_job(job_id, job_key, **input)
+            scheduler.add_job(RunNowTrigger(), job, [job_id, input], None)
     except sa.exc.IntegrityError:
         error_string = 'job_id {} already exists'.format(job_id)
         return json.dumps({"error": error_string}), 409, headers
-
-    scheduler.add_job(RunNowTrigger(), job, [job_id, input], None)
 
     return job_status(job_id=job_id, show_job_key=True, ignore_auth=True)
 
