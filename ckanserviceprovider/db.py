@@ -75,7 +75,7 @@ def init(uri, echo=False):
 
     """
     global ENGINE, _METADATA, JOBS_TABLE, METADATA_TABLE, LOGS_TABLE
-    ENGINE = sqlalchemy.create_engine(uri, echo=echo, convert_unicode=True)
+    ENGINE = sqlalchemy.create_engine(uri, echo=echo, convert_unicode=True, strategy='threadlocal')
     _METADATA = sqlalchemy.MetaData(ENGINE)
     JOBS_TABLE = _init_jobs_table()
     METADATA_TABLE = _init_metadata_table()
@@ -198,14 +198,13 @@ def should_be_blocked(new_job_meta, is_conflict):
     """ Check existing whether the new job is conflicting with the existing running ones."""
     conn = ENGINE.connect()
     with conn.begin():
-        select = JOBS_TABLE.select([JOBS_TABLE.c.job_id])\
-            .group_by(JOBS_TABLE.c.job_id)\
-            .order_by(JOBS_TABLE.c.requested_timestamp.desc())\
+        select = JOBS_TABLE.select()\
             .where(JOBS_TABLE.c.status == 'pending')\
+            .order_by(JOBS_TABLE.c.requested_timestamp.desc())\
             .with_for_update()
-        res = conn.execute(select)
-        for (job_id, ) in res:
-            job_meta = _get_metadata(job_id)
+        jobs = conn.execute(select)
+        for job in jobs:
+            job_meta = _get_metadata(job['job_id'])
             if is_conflict(new_job_meta, job_meta):
                 return True
     return False
