@@ -185,13 +185,26 @@ def job_listener(event):
     else:
         db.mark_job_as_completed(job_id, event.retval)
 
-    job_meta = db._get_metadata(job_id)
     try:
-        job_id = db.get_next_async_blocking_job(
-            db._get_metadata(job_id), async_types[job_meta['job_type']][1])
-        db.mark_job_as_pending(job_id)
+        next_job = db.get_next_async_blocking_job(
+            db._get_metadata(job_id),
+            async_types[db.get_job(job_id)['job_type']][1])
+        print >>sys.stderr, 'Unblocking job:', next_job
+        if next_job:
+            db.mark_job_as_pending(next_job['job_id'])
+            run_asynchronous_job(
+                next_job['job_type'], next_job['job_id'], next_job['job_key'],
+                dict(
+                    job_type=next_job['job_type'],
+                    api_key=next_job['api_key'],
+                    data=next_job['data'],
+                    metadata=next_job['metadata'],
+                    result_url=next_job['result_url'],
+                )
+            )
     except:
-        pass
+        import traceback
+        traceback.print_exc(file=sys.stderr)
 
 
     api_key = db.get_job(job_id)["api_key"]
@@ -687,10 +700,7 @@ def run_asynchronous_job(job, job_id, job_key, input):
     if not scheduler.running:
         scheduler.start()
     try:
-        if db.should_be_blocked(input['metadata'], is_conflict):
-            db.add_blocking_job(job_id, job_key, **input)
-        else:
-            db.add_pending_job(job_id, job_key, **input)
+        if db.add_job(job_id, job_key, **dict(input, check_conflict=is_conflict)):
             scheduler.add_job(RunNowTrigger(), job, [job_id, input], None)
     except sa.exc.IntegrityError:
         error_string = 'job_id {} already exists'.format(job_id)

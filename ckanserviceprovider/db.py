@@ -42,6 +42,7 @@ See the functions' own docstrings for details.
 
 """
 from __future__ import unicode_literals
+import sys
 import datetime
 import json
 
@@ -188,26 +189,10 @@ def get_next_async_blocking_job(done_job_meta, is_conflict):
     res = conn.execute(JOBS_TABLE.select().where(JOBS_TABLE.c.status == 'blocking'))
     # Since the conflicting job finished, the blocking one can be started
     for job in res:
-        job_meta = _get_metadata(job.id)
+        job_meta = _get_metadata(job.job_id)
         if is_conflict(job_meta, done_job_meta):
-            return job.id
+            return get_job(job.job_id)
     return None
-
-
-def should_be_blocked(new_job_meta, is_conflict):
-    """ Check existing whether the new job is conflicting with the existing running ones."""
-    conn = ENGINE.connect()
-    with conn.begin():
-        select = JOBS_TABLE.select()\
-            .where(JOBS_TABLE.c.status == 'pending')\
-            .order_by(JOBS_TABLE.c.requested_timestamp.desc())\
-            .with_for_update()
-        jobs = conn.execute(select)
-        for job in jobs:
-            job_meta = _get_metadata(job['job_id'])
-            if is_conflict(new_job_meta, job_meta):
-                return True
-    return False
 
 
 def mark_job_as_pending(job_id, data=None):
@@ -228,22 +213,7 @@ def mark_job_as_pending(job_id, data=None):
     _update_job(job_id, update_dict)
 
 
-
-def add_pending_job(job_id, job_key, job_type, api_key, status='pending',
-                    data=None, metadata=None, result_url=None):
-    """ Add a new job and set it to pending (running/going to run)"""
-    add_job(job_id, job_key, job_type, api_key, status='pending',
-            data=data, metadata=metadata, result_url=result_url)
-
-
-def add_blocking_job(job_id, job_key, job_type, api_key, status='blocking',
-                     data=None, metadata=None, result_url=None):
-    """ Add a new job and set it to blocking (having a conflicting peer running)"""
-    add_job(job_id, job_key, job_type, api_key, status='pending',
-            data=data, metadata=metadata, result_url=result_url)
-
-
-def add_job(job_id, job_key, job_type, api_key, status='pending',
+def add_job(job_id, job_key, job_type, api_key, check_conflict=None,
             data=None, metadata=None, result_url=None):
     """Add a new job with status "pending" to the jobs table.
 
@@ -281,10 +251,18 @@ def add_job(job_id, job_key, job_type, api_key, status='pending',
         job result to when the job has finished
     :type result_url: unicode
 
+    :return: whether the job is ready for running (in "pending" status)
+
     """
+    # If a job with the job_id exists then leave it as-is.
+    j = get_job(job_id)
+    if j is not None:
+        return j['status'] == "pending"
+
     if not data:
         data = {}
     data = json.dumps(data)
+
 
     # Turn strings into unicode to stop SQLAlchemy
     # "Unicode type received non-unicode bind param value" warnings.
@@ -303,13 +281,24 @@ def add_job(job_id, job_key, job_type, api_key, status='pending',
     if not metadata:
         metadata = {}
 
+    status = "pending"
     conn = ENGINE.connect()
     trans = conn.begin()
     try:
+        jobs = conn.execute(JOBS_TABLE.select()\
+            .where(JOBS_TABLE.c.status == 'pending')\
+            .order_by(JOBS_TABLE.c.requested_timestamp.desc())\
+            .with_for_update())
+        for job in jobs:
+            job_meta = _get_metadata(job['job_id'])
+            if check_conflict(metadata, job_meta):
+                status = "blocking"
+                break
+        print >>sys.stderr, "[adding_job] adding a", status, "job"
         conn.execute(JOBS_TABLE.insert().values(
             job_id=job_id,
             job_type=job_type,
-            status='pending',
+            status=status,
             requested_timestamp=datetime.datetime.now(),
             sent_data=data,
             result_url=result_url,
@@ -344,6 +333,7 @@ def add_job(job_id, job_key, job_type, api_key, status='pending',
         raise
     finally:
         conn.close()
+    return status == "pending"
 
 
 class InvalidErrorObjectError(Exception):
