@@ -189,7 +189,6 @@ def job_listener(event):
         next_job = db.get_next_async_blocking_job(
             db._get_metadata(job_id),
             async_types[db.get_job(job_id)['job_type']][1])
-        print >>sys.stderr, 'Unblocking job:', next_job
         if next_job:
             db.mark_job_as_pending(next_job['job_id'])
             run_asynchronous_job(
@@ -203,7 +202,6 @@ def job_listener(event):
                 )
             )
     except:
-        import traceback
         traceback.print_exc(file=sys.stderr)
 
 
@@ -628,6 +626,9 @@ def job(job_id=None):
             'Too many arguments. Extra keys are {}'.format(
                 ', '.join(extra_keys)))}), 409, headers
 
+    if db.get_job(job_id) is not None:
+        return json.dumps({u'error': u'job_id {} already exists'.format(job_id)})
+
     #check result_url here as good to give warning early.
     result_url = input.get('result_url')
     if result_url and not result_url.startswith('http'):
@@ -666,7 +667,7 @@ def job(job_id=None):
 
 def run_synchronous_job(job, job_id, job_key, input):
     try:
-        db.add_pending_job(job_id, job_key, **input)
+        db.add_job(job_id, job_key, **input)
     except sa.exc.IntegrityError, e:
         error_string = 'job_id {} already exists'.format(job_id)
         return json.dumps({"error": error_string}), 409, headers

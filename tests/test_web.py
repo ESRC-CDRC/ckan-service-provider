@@ -152,7 +152,7 @@ def echo_raw(task_id, input_):
     return raw
 
 
-@job.async
+@job.async()
 def example(task_id, input_):
     if 'time' not in input_['data']:
         raise util.JobError('time not in input')
@@ -161,13 +161,13 @@ def example(task_id, input_):
     return 'Slept for ' + str(input_['data']['time']) + ' seconds.'
 
 
-@job.async
+@job.async()
 def failing(task_id, input_):
     time.sleep(0.1)
     raise util.JobError('failed')
 
 
-@job.async
+@job.async()
 def log(task_id, input_):
     handler = util.StoringHandler(task_id, input_)
     logger = logging.Logger(task_id)
@@ -335,6 +335,7 @@ class TestWeb(object):
                              "data": {"time": 0.1}}),
             content_type='application/json')
 
+        assert 'job_id' in json.loads(response.data), json.loads(response.data)
         assert json.loads(response.data)['job_id'] == "moo", (
             json.loads(response.data))
 
@@ -1044,44 +1045,44 @@ class TestWeb(object):
         '''
         client = test_client()
 
-        db.add_pending_job(
-            "job_01", str(uuid.uuid4()), "job_type", "result_url", "api_key",
+        db.add_job(
+            "job_01", str(uuid.uuid4()), "job_type", "api_key", result_url = "result_url",
             metadata={"key": "value"})
         db.mark_job_as_completed("job_01")
-        db.add_pending_job(
-            "job_02", str(uuid.uuid4()), "job_type", "result_url", "api_key",
+        db.add_job(
+            "job_02", str(uuid.uuid4()), "job_type", "api_key", result_url = "result_url",
             metadata={"key": "value", "moo": "moo"})
         db.mark_job_as_completed("job_02")
-        db.add_pending_job(
-            "job_03", str(uuid.uuid4()), "job_type", "result_url", "api_key",
+        db.add_job(
+            "job_03", str(uuid.uuid4()), "job_type", "api_key", result_url = "result_url",
             metadata={"key": "value", "moo": "moo"})
         db.mark_job_as_completed("job_03")
-        db.add_pending_job(
-            "job_04", str(uuid.uuid4()), "job_type", "result_url", "api_key",
+        db.add_job(
+            "job_04", str(uuid.uuid4()), "job_type", "api_key", result_url = "result_url",
             metadata={"key": "value"})
         db.mark_job_as_completed("job_04")
-        db.add_pending_job(
-            "job_05", str(uuid.uuid4()), "job_type", "result_url", "api_key")
+        db.add_job(
+            "job_05", str(uuid.uuid4()), "job_type", "api_key", result_url = "result_url")
         db.mark_job_as_completed("job_05")
-        db.add_pending_job(
-            "job_06", str(uuid.uuid4()), "job_type", "result_url", "api_key")
+        db.add_job(
+            "job_06", str(uuid.uuid4()), "job_type", "api_key", result_url = "result_url")
         db.mark_job_as_completed("job_06")
-        db.add_pending_job(
-            "job_07", str(uuid.uuid4()), "job_type", "result_url", "api_key")
+        db.add_job(
+            "job_07", str(uuid.uuid4()), "job_type", "api_key", result_url = "result_url")
         db.mark_job_as_completed("job_07")
-        db.add_pending_job(
-            "job_08", str(uuid.uuid4()), "job_type", "result_url", "api_key")
+        db.add_job(
+            "job_08", str(uuid.uuid4()), "job_type", "api_key", result_url = "result_url")
         db.mark_job_as_completed("job_08")
-        db.add_pending_job(
-            "job_09", str(uuid.uuid4()), "job_type", "result_url", "api_key")
-        db.add_pending_job(
-            "job_10", str(uuid.uuid4()), "job_type", "result_url", "api_key")
-        db.add_pending_job(
-            "job_11", str(uuid.uuid4()), "job_type", "result_url", "api_key")
-        db.add_pending_job(
-            "job_12", str(uuid.uuid4()), "job_type", "result_url", "api_key")
-        db.add_pending_job(
-            "job_13", str(uuid.uuid4()), "job_type", "result_url", "api_key")
+        db.add_job(
+            "job_09", str(uuid.uuid4()), "job_type", "api_key", result_url = "result_url")
+        db.add_job(
+            "job_10", str(uuid.uuid4()), "job_type", "api_key", result_url = "result_url")
+        db.add_job(
+            "job_11", str(uuid.uuid4()), "job_type", "api_key", result_url = "result_url")
+        db.add_job(
+            "job_12", str(uuid.uuid4()), "job_type", "api_key", result_url = "result_url")
+        db.add_job(
+            "job_13", str(uuid.uuid4()), "job_type", "api_key", result_url = "result_url")
 
         response = client.get('/job')
         return_data = json.loads(response.data)
@@ -1121,16 +1122,16 @@ class TestWeb(object):
         client = test_client()
 
         # Add some jobs, all completed and therefore eligible for deletion.
-        db.add_pending_job(
-            "job_01", str(uuid.uuid4()), "job_type", "result_url", "api_key",
+        db.add_job(
+            "job_01", str(uuid.uuid4()), "job_type", "api_key", result_url = "result_url",
             metadata={"key": "value"})
         db.mark_job_as_completed("job_01")
-        db.add_pending_job(
-            "job_02", str(uuid.uuid4()), "job_type", "result_url", "api_key",
+        db.add_job(
+            "job_02", str(uuid.uuid4()), "job_type", "api_key", result_url = "result_url",
             metadata={"key": "value", "moo": "moo"})
         db.mark_job_as_completed("job_02")
-        db.add_pending_job(
-            "job_03", str(uuid.uuid4()), "job_type", "result_url", "api_key",
+        db.add_job(
+            "job_03", str(uuid.uuid4()), "job_type", "api_key", result_url = "result_url",
             metadata={"key": "value", "moo": "moo"})
         db.mark_job_as_completed("job_03")
 

@@ -27,7 +27,7 @@ Delete all the database tables, for tests.
 get_job()
 Get a dictionary representation of a job from the database.
 
-add_pending_job()
+add_job()
 Add a new job with status "pending" to the database.
 Jobs always have status "pending" when they're first added.
 
@@ -213,8 +213,8 @@ def mark_job_as_pending(job_id, data=None):
     _update_job(job_id, update_dict)
 
 
-def add_job(job_id, job_key, job_type, api_key, check_conflict=None,
-            data=None, metadata=None, result_url=None):
+def add_job(job_id, job_key, job_type, api_key,
+            data=None, metadata=None, result_url=None, check_conflict=lambda x,y: False):
     """Add a new job with status "pending" to the jobs table.
 
     All code that adds jobs to the jobs table should go through this function.
@@ -294,7 +294,6 @@ def add_job(job_id, job_key, job_type, api_key, check_conflict=None,
             if check_conflict(metadata, job_meta):
                 status = "blocking"
                 break
-        print >>sys.stderr, "[adding_job] adding a", status, "job"
         conn.execute(JOBS_TABLE.insert().values(
             job_id=job_id,
             job_type=job_type,
