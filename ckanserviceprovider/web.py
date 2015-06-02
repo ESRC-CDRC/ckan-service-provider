@@ -101,7 +101,7 @@ def _configure_logger_for_production(logger):
         logger.addHandler(file_handler)
 
     mail_handler = logging.handlers.SMTPHandler(
-        '127.0.0.1',
+        app.config.get('SMTP_SERVER', '127.0.0.1'),
         app.config.get('FROM_EMAIL'),
         app.config.get('ADMINS', []),
         'CKAN Service Error')
