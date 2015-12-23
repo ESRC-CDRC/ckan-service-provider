@@ -16,7 +16,7 @@ import ckanserviceprovider.db as db
 
 # The callback URL that ckanserviceprovider will post to when the
 # asynchronous background job finishes. We will mock this.
-RESULT_URL = "http://demo.ckan.org/ckanserviceprovider/result_url"
+RESULT_URL = "http://0.0.0.0/ckanserviceprovider/result_url"
 
 
 def configure():
@@ -727,6 +727,7 @@ class TestWeb(object):
             data=json.dumps({"job_type": "echo",
                              "api_key": 42}),
             content_type='application/json')
+
         assert response.status_code == 200, response.status
         job_status_data = json.loads(response.data)
         job_key = job_status_data['job_key']
